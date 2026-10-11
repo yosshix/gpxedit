@@ -88,6 +88,20 @@ input[type=range]{width:100%;height:34px;margin:2px 0;accent-color:var(--keep)}
 #status.err{color:var(--cut)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+.ov{position:fixed;inset:0;z-index:50;background:rgba(8,16,18,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.dlg{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;width:100%;max-width:520px;max-height:88vh;max-height:88dvh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.dlg h2{margin:0;padding:14px 16px 8px;font-size:17px}
+.dlg .bd{padding:0 16px 8px;overflow:auto;-webkit-overflow-scrolling:touch}
+.dlg dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 10px}
+.dlg dt{color:var(--muted);font-size:13px}
+.dlg dd{margin:0;word-break:break-all}
+.dlg h3{margin:8px 0 4px;font-size:14px}
+.dlg ul{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:5px;max-height:200px;overflow:auto}
+.dlg li{padding:5px 8px;border-bottom:1px solid var(--line);font-size:13px}
+.dlg li:last-child{border-bottom:0}
+.dlg li small{color:var(--muted)}
+.dlg .ft{display:flex;gap:8px;justify-content:flex-end;padding:10px 16px 14px;border-top:1px solid var(--line)}
 </style>
 
 <div class="wrap">
@@ -627,11 +641,42 @@ $('#copy').addEventListener('click',async()=>{
     let ok=false;try{ok=document.execCommand('copy');}catch(_){}ta.remove();say(ok?'コピーしました。':'コピーできませんでした。',!ok);}
 });
 
+/* ---------- file info dialog ---------- */
+function fDT(ms){if(isNaN(ms))return '（時刻なし）';const d=new Date(ms+9*3600e3),P=n=>String(n).padStart(2,'0');
+  return `${d.getUTCFullYear()}/${P(d.getUTCMonth()+1)}/${P(d.getUTCDate())} ${P(d.getUTCHours())}:${P(d.getUTCMinutes())}:${P(d.getUTCSeconds())}`;}
+function showInfo(g,fname){
+  const n=g.pts.length,t0=Date.parse(g.pts[0].tm),t1=Date.parse(g.pts[n-1].tm);
+  const okT=!isNaN(t0)&&!isNaN(t1)&&t1>=t0;
+  const avg=okT&&n>1?(t1-t0)/1000/(n-1):NaN;
+  const wl=g.wpts.map(w=>{const nm=w.kids.find(k=>k[0]==='name'),cm=w.kids.find(k=>k[0]==='cmt');
+    return `<li><span class="mono">${esc(fDT(w.tm?Date.parse(w.tm):NaN))}</span> ${esc(nm?nm[1].trim():'（名称なし）')}${cm&&cm[1].trim()?` <small>[${esc(cm[1].trim())}]</small>`:''}</li>`;}).join('');
+  const ov=document.createElement('div');ov.className='ov';
+  ov.innerHTML=`<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgT"><h2 id="dlgT">GPXファイルの情報</h2><div class="bd"><dl>
+    <dt>ファイル</dt><dd>${esc(fname)}</dd>
+    <dt>開始日時（JST）</dt><dd class="mono">${esc(fDT(t0))}</dd>
+    <dt>終了日時（JST）</dt><dd class="mono">${esc(fDT(t1))}</dd>
+    <dt>所要時間</dt><dd>${okT?esc(fDur(t1-t0)):'―'}</dd>
+    <dt>測位ポイント数</dt><dd>${esc(fN(n))}点</dd>
+    <dt>ポイント間隔（平均）</dt><dd>${isNaN(avg)?'―':esc(avg.toFixed(2))+' 秒'}</dd>
+    <dt>トラック名</dt><dd>${esc(g.trkName||'（なし）')}</dd>
+    <dt>Creator</dt><dd>${esc(g.creator||'（なし）')}</dd></dl>
+    <h3>ウェイポイント（${g.wpts.length}件）</h3>${g.wpts.length?`<ul>${wl}</ul>`:'<p style="margin:0;color:var(--muted);font-size:13px">ウェイポイントはありません。</p>'}</div>
+    <div class="ft"><button type="button" class="btn" id="dlgNo">キャンセル</button><button type="button" class="btn primary" id="dlgOk">OK</button></div></div>`;
+  document.body.appendChild(ov);
+  return new Promise(res=>{
+    const done=v=>{document.removeEventListener('keydown',kd);ov.remove();res(v);};
+    const kd=e=>{if(e.key==='Escape')done(false);};
+    document.addEventListener('keydown',kd);
+    ov.querySelector('#dlgOk').onclick=()=>done(true);ov.querySelector('#dlgNo').onclick=()=>done(false);
+    ov.querySelector('#dlgOk').focus();
+  });
+}
+
 /* ---------- file open ---------- */
 async function openFile(f){
   if(!f)return;
   say('読み込み中…');
-  try{const text=await f.text();const g=parseGPX(text);ingest(g,f.name,false);say(`${f.name} を読み込みました（${fN(g.pts.length)}点）。`);}
+  try{const text=await f.text();const g=parseGPX(text);if(!await showInfo(g,f.name)){say('読み込みを取り消しました。');return;}ingest(g,f.name,false);say(`${f.name} を読み込みました（${fN(g.pts.length)}点）。`);}
   catch(e){say(e.message||'読み込みに失敗しました。',true);}
 }
 $('#file').addEventListener('change',e=>{openFile(e.target.files[0]);e.target.value='';});
