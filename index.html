@@ -649,7 +649,12 @@ function fDT(ms){if(isNaN(ms))return '（時刻なし）';const d=new Date(ms+9*
 function showInfo(g,fname){
   const n=g.pts.length,t0=Date.parse(g.pts[0].tm),t1=Date.parse(g.pts[n-1].tm);
   const okT=!isNaN(t0)&&!isNaN(t1)&&t1>=t0;
-  const avg=okT&&n>1?(t1-t0)/1000/(n-1):NaN;
+  const tt=g.pts.map(p=>Date.parse(p.tm)),stopSeg=new Set();
+  if(okT)for(const w of g.wpts){const cm=w.kids.find(k=>k[0]==='cmt');if(!cm||!/stop/i.test(cm[1]))continue;const wt=w.tm?Date.parse(w.tm):NaN;if(isNaN(wt))continue;
+    let j=0,bd=Infinity;for(let i=0;i<n;i++){const d=Math.abs(tt[i]-wt);if(d<bd){bd=d;j=i;}}
+    const a=j>0?tt[j]-tt[j-1]:-1,b=j<n-1?tt[j+1]-tt[j]:-1;if(Math.max(a,b)>0)stopSeg.add(a>=b?j:j+1);}
+  let stopMs=0;for(const i of stopSeg)stopMs+=tt[i]-tt[i-1];
+  const segs=n-1-stopSeg.size,avg=okT&&segs>0?((t1-t0)-stopMs)/1000/segs:NaN;
   const st=(()=>{const la=g.pts.map(p=>parseFloat(p.la)),lo=g.pts.map(p=>parseFloat(p.lo)),T=g.pts.map(p=>Date.parse(p.tm));
     const cum=[0];let mv=0;for(let i=1;i<n;i++){const d=hav(la[i-1],lo[i-1],la[i],lo[i]);cum.push(cum[i-1]+d);const dt=(T[i]-T[i-1])/1000;if(dt>0&&d/dt*3.6>=1)mv+=dt;}
     let mx=NaN;if(okT){const v=[0];for(let i=1;i<n;i++){const dt=(T[i]-T[i-1])/1000;v.push(dt>0?(cum[i]-cum[i-1])/dt*3.6:0);}mx=0;const K=7;for(let i=1;i<n;i++){const w=v.slice(Math.max(1,i-K),Math.min(n,i+K+1)).sort((a,b)=>a-b);mx=Math.max(mx,w[w.length>>1]);}}
@@ -665,12 +670,12 @@ function showInfo(g,fname){
     <dt>終了日時（JST）</dt><dd class="mono">${esc(fDT(t1))}</dd>
     <dt>所要時間</dt><dd>${okT?esc(fDur(t1-t0)):'―'}</dd>
     <dt>測位ポイント数</dt><dd>${esc(fN(n))}点</dd>
-    <dt>ポイント間隔（平均）</dt><dd>${isNaN(avg)?'―':esc(avg.toFixed(2))+' 秒'}</dd>
+    <dt>ポイント間隔（平均）</dt><dd>${isNaN(avg)?'―':esc(avg.toFixed(2))+' 秒'}<br><small style="color:var(--muted)">停止${stopSeg.size}回・計${esc(fDur(stopMs))}を除く</small></dd>
     <dt>走行距離</dt><dd>${esc(fKm(st.dist))}</dd>
     <dt>平均速度（全体）</dt><dd>${esc(kmh(st.avg))}</dd>
     <dt>平均速度（停止除く）</dt><dd>${esc(kmh(st.mvAvg))}</dd>
     <dt>最高速度（外れ値除く）</dt><dd>${esc(kmh(st.mx))}</dd>
-    <dt>標高（最低／最高）</dt><dd>${esc(mtr(st.eMin))} ／ ${esc(mtr(st.eMax))}</dd>
+    <dt>最高標高</dt><dd>${esc(mtr(st.eMax))}</dd>
     <dt>トラック名</dt><dd>${esc(g.trkName||'（なし）')}</dd>
     <dt>Creator</dt><dd>${esc(g.creator||'（なし）')}</dd></dl>
     <h3>ウェイポイント（${g.wpts.length}件）</h3>${g.wpts.length?`<ul>${wl}</ul>`:'<p style="margin:0;color:var(--muted);font-size:13px">ウェイポイントはありません。</p>'}</div>
