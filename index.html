@@ -1,5 +1,6 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="GPXedit"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="apple-touch-icon.png"><style>:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style></head><body>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="GPXedit"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" href="apple-touch-icon.png"><style>:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}.ver{font-size:13px;font-weight:400;color:var(--muted);vertical-align:middle;margin-left:6px}
+</style></head><body>
 <title>GPXedit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -109,7 +110,7 @@ input[type=range]{width:100%;height:34px;margin:2px 0;accent-color:var(--keep)}
 <div class="wrap">
   <header>
     <div>
-      <h1>GPXedit</h1>
+      <h1>GPXedit <span class="ver">Ver.1.1</span></h1>
       <p>GPXを開き、地図と時間のスライダーで開始・終了・削除する区間を決めて書き出します。処理はこの端末内だけで行い、ファイルは外部に送信しません。</p>
     </div>
     <div class="actions">
@@ -133,6 +134,7 @@ input[type=range]{width:100%;height:34px;margin:2px 0;accent-color:var(--keep)}
           <option value="pale">淡色地図</option>
           <option value="std">標準地図</option>
           <option value="photo">航空写真</option>
+        <option value="osm">OpenStreetMap</option>
           <option value="none">背景なし</option>
         </select>
         <div class="note" id="mapnote"></div>
@@ -422,21 +424,31 @@ function marker(ctx,i,W,H,color,text,active){
   label(ctx,text,x+11,y-9,color,COL.map);
 }
 /* 背景地図: 国土地理院タイル(Webメルカトル)。外部画像が読めない環境では自動的にグリッド表示へ戻る */
-const TILES={std:['std','png'],pale:['pale','png'],photo:['seamlessphoto','jpg']};
-const tcache=new Map();const tstat={ok:0,bad:0};let BG='pale';
+const GSI='https://cyberjapandata.gsi.go.jp/xyz/',GSIA='出典：国土地理院（地理院タイル）';
+const TILES={
+  pale:{url:(z,x,y)=>`${GSI}pale/${z}/${x}/${y}.png`,max:18,attr:GSIA},
+  std:{url:(z,x,y)=>`${GSI}std/${z}/${x}/${y}.png`,max:18,attr:GSIA},
+  photo:{url:(z,x,y)=>`${GSI}seamlessphoto/${z}/${x}/${y}.jpg`,max:18,attr:GSIA},
+  osm:{url:(z,x,y)=>`https://tile.openstreetmap.org/${z}/${x}/${y}.png`,max:19,attr:'\u00a9 OpenStreetMap contributors'}
+};
+const BGKEY='gpxedit.bg';
+const tcache=new Map();const tstat={ok:0,bad:0};
+let BG='pale';
+try{const v=localStorage.getItem(BGKEY);if(v==='none'||TILES[v])BG=v;}catch(_){}
 function updateNote(){
   const el=$('#mapnote'),at=$('#mapattr');
   at.hidden=BG==='none'||tstat.ok===0;
+  if(TILES[BG])at.textContent=TILES[BG].attr;
   if(BG==='none')el.textContent='';
   else if(tstat.ok===0&&tstat.bad>=3)el.textContent='背景地図を読み込めません。この画面では外部の画像を使えないか、通信できない状態です。';
   else el.textContent='';
 }
 function getTile(layer,z,x,y){
   const key=layer+'/'+z+'/'+x+'/'+y;let t=tcache.get(key);if(t)return t;
-  const [dir,ext]=TILES[layer],img=new Image();t={img,state:0};
+  const img=new Image();t={img,state:0};
   img.onload=()=>{t.state=1;tstat.ok++;updateNote();draw();};
   img.onerror=()=>{t.state=2;tstat.bad++;updateNote();};
-  img.src=`https://cyberjapandata.gsi.go.jp/xyz/${dir}/${z}/${x}/${y}.${ext}`;
+  img.src=TILES[layer].url(z,x,y);
   tcache.set(key,t);
   if(tcache.size>600)tcache.delete(tcache.keys().next().value);
   return t;
@@ -444,7 +456,7 @@ function getTile(layer,z,x,y){
 function drawTiles(ctx,W,H){
   if(BG==='none')return false;
   const C=2*Math.PI*MR,half=C/2;
-  const z=clamp(Math.round(Math.log2(V.sc*C/256)),4,18),n=1<<z,ts=C/n;
+  const z=clamp(Math.round(Math.log2(V.sc*C/256)),4,(TILES[BG]||{max:18}).max),n=1<<z,ts=C/n;
   const tx0=Math.floor((V.cx-W/2/V.sc+half)/ts),tx1=Math.floor((V.cx+W/2/V.sc+half)/ts);
   const ty0=Math.floor((half-(V.cy+H/2/V.sc))/ts),ty1=Math.floor((half-(V.cy-H/2/V.sc))/ts);
   if((tx1-tx0+1)*(ty1-ty0+1)>90)return false;
@@ -704,7 +716,8 @@ window.addEventListener('drop',e=>{e.preventDefault();openFile(e.dataTransfer.fi
 /* ---------- boot ---------- */
 buildRows();
 readColors();
-$('#bg').addEventListener('change',e=>{BG=e.target.value;tstat.bad=0;updateNote();draw();});
+$('#bg').value=BG;
+$('#bg').addEventListener('change',e=>{BG=e.target.value;tstat.bad=0;try{localStorage.setItem(BGKEY,BG);}catch(_){}updateNote();draw();});
 updateNote();
 ingest(makeSample(),'sample.gpx',true);
 new ResizeObserver(()=>draw()).observe(mc);new ResizeObserver(()=>draw()).observe(pc);
