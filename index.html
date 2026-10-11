@@ -648,6 +648,12 @@ function showInfo(g,fname){
   const n=g.pts.length,t0=Date.parse(g.pts[0].tm),t1=Date.parse(g.pts[n-1].tm);
   const okT=!isNaN(t0)&&!isNaN(t1)&&t1>=t0;
   const avg=okT&&n>1?(t1-t0)/1000/(n-1):NaN;
+  const st=(()=>{const la=g.pts.map(p=>parseFloat(p.la)),lo=g.pts.map(p=>parseFloat(p.lo)),T=g.pts.map(p=>Date.parse(p.tm));
+    const cum=[0];let mv=0;for(let i=1;i<n;i++){const d=hav(la[i-1],lo[i-1],la[i],lo[i]);cum.push(cum[i-1]+d);const dt=(T[i]-T[i-1])/1000;if(dt>0&&d/dt*3.6>=1)mv+=dt;}
+    let mx=NaN;if(okT){const v=[0];for(let i=1;i<n;i++){const dt=(T[i]-T[i-1])/1000;v.push(dt>0?(cum[i]-cum[i-1])/dt*3.6:0);}mx=0;const K=7;for(let i=1;i<n;i++){const w=v.slice(Math.max(1,i-K),Math.min(n,i+K+1)).sort((a,b)=>a-b);mx=Math.max(mx,w[w.length>>1]);}}
+    const el=g.pts.map(p=>parseFloat(p.ele)).filter(v=>isFinite(v));
+    return {dist:cum[n-1],avg:okT&&t1>t0?cum[n-1]/((t1-t0)/1000)*3.6:NaN,mvAvg:mv>0?cum[n-1]/mv*3.6:NaN,mx,eMin:el.length?Math.min(...el):NaN,eMax:el.length?Math.max(...el):NaN};})();
+  const kmh=v=>isNaN(v)?'―':v.toFixed(1)+' km/h',mtr=v=>isNaN(v)?'―':Math.round(v).toLocaleString('ja-JP')+' m';
   const wl=g.wpts.map(w=>{const nm=w.kids.find(k=>k[0]==='name'),cm=w.kids.find(k=>k[0]==='cmt');
     return `<li><span class="mono">${esc(fDT(w.tm?Date.parse(w.tm):NaN))}</span> ${esc(nm?nm[1].trim():'（名称なし）')}${cm&&cm[1].trim()?` <small>[${esc(cm[1].trim())}]</small>`:''}</li>`;}).join('');
   const ov=document.createElement('div');ov.className='ov';
@@ -658,6 +664,11 @@ function showInfo(g,fname){
     <dt>所要時間</dt><dd>${okT?esc(fDur(t1-t0)):'―'}</dd>
     <dt>測位ポイント数</dt><dd>${esc(fN(n))}点</dd>
     <dt>ポイント間隔（平均）</dt><dd>${isNaN(avg)?'―':esc(avg.toFixed(2))+' 秒'}</dd>
+    <dt>走行距離</dt><dd>${esc(fKm(st.dist))}</dd>
+    <dt>平均速度（全体）</dt><dd>${esc(kmh(st.avg))}</dd>
+    <dt>平均速度（停止除く）</dt><dd>${esc(kmh(st.mvAvg))}</dd>
+    <dt>最高速度（外れ値除く）</dt><dd>${esc(kmh(st.mx))}</dd>
+    <dt>標高（最低／最高）</dt><dd>${esc(mtr(st.eMin))} ／ ${esc(mtr(st.eMax))}</dd>
     <dt>トラック名</dt><dd>${esc(g.trkName||'（なし）')}</dd>
     <dt>Creator</dt><dd>${esc(g.creator||'（なし）')}</dd></dl>
     <h3>ウェイポイント（${g.wpts.length}件）</h3>${g.wpts.length?`<ul>${wl}</ul>`:'<p style="margin:0;color:var(--muted);font-size:13px">ウェイポイントはありません。</p>'}</div>
